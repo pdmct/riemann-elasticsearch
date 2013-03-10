@@ -1,7 +1,7 @@
 riemann-elasticsearch
 =====================
 
-Simple elasticsearch monitoring client for Riemann
+Simple elasticsearch monitoring client for Riemann https://github.com/aphyr/riemann
 
 ---
 Dependencies
