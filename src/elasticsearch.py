@@ -14,6 +14,9 @@ import time
 # see https://github.com/banjiewen/bernhard
 import bernhard
 
+# 2.3 - 2.6
+from optparse import OptionParser
+
 INTERVAL_SEC = 15  			# seconds
 DEFAULT_TIMEOUT = 10.0    	# seconds
 DEFAULT_HOST = "localhost"  # run on the same host
@@ -64,7 +67,7 @@ def nodeStats(server):
 
 def main(argv):
   # process command line arguments
-  # expecting
+  # expecting:
   # es_host 
   # es_port
   # riemann_host
@@ -75,6 +78,40 @@ def main(argv):
   sample_interval = INTERVAL_SEC
   es_host = DEFAULT_HOST
   es_port = DEFAULT_PORT
+  riemann_host = "127.0.0.1"
+  riemann_port = 5555
+  verbose = False
+
+  parser = OptionParser()
+  parser.add_option("-t","--timeout", type="int", dest="timeout",help="connection timeout value")
+  parser.add_option("-i","--interval", type="int", dest="interval",help="interval between samples")
+  parser.add_option("-e","--es_host", dest="eshost",help="elastic search host")
+  parser.add_option("-p","--es_port", type="int", dest="esport",help="elastic search port")
+  parser.add_option("-r","--riemann_host", dest="riemann_host", help="riemann sever host")
+  parser.add_option("-s","--riemann_port", type="int", dest="riemann_port", help="riemann sever port")
+  parser.add_option("-v","--verbose",action="store_true", dest="verbose",default="False")
+
+  (options, args) = parser.parse_args(argv) 
+
+  if not options.timeout is None:
+    timout = options.timeout
+
+  if not options.interval is None:
+    sample_interval = options.interval
+
+  if not options.eshost is None:
+    es_host = options.eshost
+
+  if not options.esport is None:
+    es_port = options.esport
+
+  if not options.riemann_host is None:
+    riemann_host = options.riemann_host
+
+  if not options.riemann_port is None:
+    riemann_port = options.riemann_port
+
+  verbose = options.verbose
 
 
   ts = None
@@ -85,7 +122,7 @@ def main(argv):
   try:
     server.connect()
   except socket.error, (erno, e):
-  	err("Cannot connect to Elasticsearch")
+    err("Cannot connect to Elasticsearch")
     return 1    
   if json is None:
     err("This collector requires the `json' Python module.")
@@ -97,10 +134,10 @@ def main(argv):
   nodeid, nodestats = nodestats["nodes"].popitem()
 
   # create Riemann client
-  # c = bernhard.Client(riemann_host, riemann_port)
-  c = bernhard.Client("10.73.67.145")
+  c = bernhard.Client(host=riemann_host, port=riemann_port)
+  #c = bernhard.Client("10.73.67.145")
 
-  def emitMetric(host, service, timestamp, metric, **tags):
+  def emitMetrics(host, service, timestamp, metric, **tags):
     if tags:
       tags = " " + ",".join("%s" % (value)
                             for name, value in tags.iteritems())
@@ -111,17 +148,19 @@ def main(argv):
     svc = "elasticsearch."+ service
     mtrc = metric
     time = timestamp
-    tgs =  list(cluster_name + ', ' + tags.split(","))
+    tgs =   str(cluster_name).encode('ascii','ignore') 
     
     c.send({  'host': hst, 
-    		  'state':state, 
-    		  'service': 'ok', 
+    		  'state': 'ok', 
+    		  'service': svc, 
     		  'time':time, 
     		  'metric': mtrc, 
     		  'description': '' + cluster_name + ' ' + str(tgs), 
-    		  'tags': tgs})
+    		  'tags':[ tgs]})
+    if verbose is True:
+      print ('%s %s %d %d %s' % (hst, svc, mtrc, time, tgs))
     
- while True:
+  while True:
     ts = int(time.time())
     nodestats = nodeStats(server)
     
@@ -135,11 +174,11 @@ def main(argv):
       err("node ID changed from %r to %r" % (nodeid, this_nodeid))
       return 1
 
-    is_master = nodeid == cluster_state(server)["master_node"]
+    is_master = nodeid == clusterState(server)["master_node"]
     emitMetrics(es_host,"is_master",ts,  int(is_master))
     if is_master:
       ts = int(time.time())  
-      cstats = cluster_health(server)
+      cstats = clusterHealth(server)
       for stat, value in cstats.iteritems():
         if stat == "status":
           value = STATE_MAP.get(value, -1)
@@ -184,5 +223,6 @@ def main(argv):
 
 if __name__ == "__main__":
   sys.exit(main(sys.argv))
+
 
 
