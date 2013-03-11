@@ -135,7 +135,6 @@ def main(argv):
 
   # create Riemann client
   c = bernhard.Client(host=riemann_host, port=riemann_port)
-  #c = bernhard.Client("10.73.67.145")
 
   def emitMetrics(host, service, timestamp, metric, **tags):
     if tags:
